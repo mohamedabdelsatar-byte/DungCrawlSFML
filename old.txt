@@ -1,0 +1,141 @@
+#include <SFML/Graphics.hpp>
+#include <SFML/Window.hpp>
+#include <math.h>
+#include <vector>
+#include "Player.h"
+#include "Enemy.h"
+
+/* sf::Vector2f normalizeVector(sf::Vector2f vector){
+    float m = std::sqrt(vector.x*vector.x + vector.y * vector.y);
+
+    sf::Vector2f normalizedVector;
+
+    normalizedVector.x = vector.x/m;
+    normalizedVector.y = vector.y/m;
+
+    return normalizedVector;
+} */
+sf::Vector2f direction;
+
+int main() {
+    sf::RenderWindow window(sf::VideoMode({1920, 1080}), "DungCrawler");
+
+
+    Player player;
+    Enemy enemy;
+
+    player.Load();
+    enemy.Load();
+
+    std::vector<sf::RectangleShape> bullets;
+    std::vector<sf::Vector2f> bulletVelocities;
+    //sf::RectangleShape bullets({50.f, 25.f});
+
+
+    //for animations
+    const int totalFrames1 = 6;
+    int currentFrame = 0;
+    sf::Clock animationClock;
+    sf::Time frameTime = sf::milliseconds(150);
+    //------
+    
+
+    //bullets.setPosition(player.getPosition());
+    //---------
+   
+   //Vector Direction Calculations
+
+    float bulletSpeed = 2.0f;    
+    
+    
+    //---------
+
+    //MAIN LOOP
+    
+    while (window.isOpen()) {
+        while (const std::optional event = window.pollEvent()) {
+
+            if (event ->is<sf::Event::Closed>()) {
+                window.close();
+            }
+        }
+        if (animationClock.getElapsedTime() >= frameTime) {
+            currentFrame++;
+            if (currentFrame >= totalFrames1) currentFrame = 0;
+
+            player.sprite.setTextureRect(sf::IntRect(
+                {0, currentFrame * 48},
+                {32, 48}
+            ));
+
+            animationClock.restart(); // Reset the clock for the next frame
+        }
+
+
+        //Player Movement
+        player.Update();
+        if(sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)){
+            // 1. Create the bullet
+            sf::RectangleShape newBullet({50.f, 25.f});
+            newBullet.setPosition(player.sprite.getPosition());
+            bullets.push_back(newBullet);
+
+            // 2. Calculate direction ONCE for THIS bullet
+            sf::Vector2f dir = enemy.sprite.getPosition() - player.sprite.getPosition();
+            
+            // Normalize and multiply by a REASONABLE speed (e.g., 5.0f or 10.0f)
+            sf::Vector2f velocity = dir.normalized() * bulletSpeed; 
+
+            // 3. Save this velocity so this bullet remembers where to go
+            bulletVelocities.push_back(velocity);
+
+        }
+
+        
+
+
+        for (size_t i = 0; i < bullets.size(); i++)
+        {
+            bullets[i].move(bulletVelocities[i]);
+        }
+        
+       // bullets.setPosition(bullets.getPosition() + (direction * bulletSpeed));
+
+
+
+        
+
+        window.clear(sf::Color::Black);
+        //DRAW
+
+        sf::RectangleShape Door1({200.f, 200.f});
+        Door1.setOrigin(sf::Vector2f(8, 8));
+        Door1.setPosition({960.f, 540.f});
+
+
+        Door1.setFillColor(sf::Color::Blue);
+
+
+
+       // window.draw(Door1);
+        window.draw(player.sprite);
+        window.draw(enemy.sprite);
+
+        for (size_t i = 0; i < bullets.size(); i++)
+        {
+          window.draw(bullets[i]);  
+        }
+        
+        
+
+
+        window.display();
+
+    }
+
+
+
+
+return 0;
+
+}
