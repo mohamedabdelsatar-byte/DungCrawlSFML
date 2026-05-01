@@ -9,7 +9,11 @@ AudioManager::AudioManager() :
     chestOpenSound(chestOpenBuffer),
     obtainedItemSound(obtainedItemBuffer),
     deniedSound(deniedBuffer),
-    walkingSound(walkingBuffer)
+    walkingSound(walkingBuffer),
+    mysteryFoundSound(mysteryFoundBuffer),
+    typingSound(typingBuffer),
+    winSound(winSoundBuffer),
+    winLongSound(winLongBuffer)
 {
 }
 
@@ -84,6 +88,33 @@ void AudioManager::loadAll()
     } else {
         walkingSound.setVolume(70.f);
         walkingSound.setLooping(true);
+    }    
+    if (!mysteryFoundBuffer.loadFromFile("Assets/audio/mystery found.mp3")) {
+        std::cout << "WARNING: Assets/audio/mystery found.mp3 missing.\n";
+    } else {
+        mysteryFoundSound.setBuffer(mysteryFoundBuffer);
+        mysteryFoundSound.setVolume(20.f); // Keep volume not too loud
+    }
+
+    if (!typingBuffer.loadFromFile("Assets/audio/typing.mp3")) {
+        std::cout << "WARNING: Assets/audio/typing.mp3 missing.\n";
+    } else {
+        typingSound.setBuffer(typingBuffer);
+        typingSound.setVolume(50.f); 
+    }
+
+    if (!winSoundBuffer.loadFromFile("Assets/audio/winsound.mp3")) {
+        std::cout << "WARNING: Assets/audio/winsound.mp3 missing.\n";
+    } else {
+        winSound.setBuffer(winSoundBuffer);
+        winSound.setVolume(100.f); 
+    }
+
+    if (!winLongBuffer.loadFromFile("Assets/audio/winlong.mp3")) {
+        std::cout << "WARNING: Assets/audio/winlong.mp3 missing.\n";
+    } else {
+        winLongSound.setBuffer(winLongBuffer);
+        winLongSound.setVolume(20.f); // 20% volume (100 lowered by 80%)
     }
 }
 
@@ -95,6 +126,8 @@ void AudioManager::playInteractSound() { interactSound.play(); }
 void AudioManager::playChestOpenSound() { chestOpenSound.play(); }
 void AudioManager::playObtainedItemSound() { obtainedItemSound.play(); }
 void AudioManager::playDeniedSound() { deniedSound.play(); }
+
+void AudioManager::playMysteryFoundSound() { mysteryFoundSound.play(); }
 
 void AudioManager::toggleWalkingSound(bool isMoving) {
     if (isMoving && walkingSound.getStatus() != sf::SoundSource::Status::Playing) {

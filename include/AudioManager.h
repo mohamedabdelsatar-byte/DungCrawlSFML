@@ -41,6 +41,18 @@ public:
     sf::SoundBuffer walkingBuffer;
     sf::Sound walkingSound;
 
+    sf::SoundBuffer mysteryFoundBuffer;
+    sf::Sound mysteryFoundSound;
+
+    sf::SoundBuffer typingBuffer;
+    sf::Sound typingSound;
+
+    sf::SoundBuffer winSoundBuffer;
+    sf::Sound winSound;
+
+    sf::SoundBuffer winLongBuffer;
+    sf::Sound winLongSound;
+
     void playDeathSound();
     void playDoorSlamSound();
     void playDoorOpenSound();
@@ -49,6 +61,7 @@ public:
     void playChestOpenSound();
     void playObtainedItemSound();
     void playDeniedSound();
+    void playMysteryFoundSound();
     
     void toggleWalkingSound(bool isMoving);
     

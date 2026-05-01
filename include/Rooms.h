@@ -46,6 +46,32 @@ class Rooms
     
     // --- AUDIO CONTEXT ---
     bool hasOpenedChestOnce = false;
+    bool showChestCombinationPopup = false;
+    bool showDoorCombinationPopup = false;
+    bool showRiddlePopup = false;
+    int currentRiddle = 0;
+    bool riddlesCompleted = false;
+    
+    // Slow print riddle state (ROGBY)
+    bool showROGBYPopup = false;
+    bool rogbyCompleted = false;
+    bool rogbySeenOnce = false; // Whether the user has seen the slow-print before
+    bool pendingMysterySound = false;
+    
+    std::string fullRiddleText = "";
+    std::string currentRiddleText = "";
+    int riddleCharIndex = 0;
+    float riddleCharTimer = 0.f;
+    float riddlePauseTimer = 0.f;
+    float riddleDarkenAlpha = 0.f;
+    bool riddleIsWriting = false;
+    bool riddleFinishedWriting = false;
+    sf::Text riddleScreenText;
+    sf::Font riddleFont; // For the requested pixel font
+
+    // Color definitions for doors
+    sf::Color doorColors[5];
+    bool mainDoorsColored = false;
 
     // Obtainment Overlays
     sf::Texture keyOverlayTexture;

@@ -16,6 +16,23 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(SFML)
 
+FetchContent_Declare(
+        ImGui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG v1.91.1
+)
+FetchContent_Populate(ImGui)
+
+set(IMGUI_SFML_FIND_SFML OFF CACHE BOOL "Don't find package SFML" FORCE)
+set(IMGUI_DIR ${imgui_SOURCE_DIR} CACHE PATH "imgui directory" FORCE)
+
+FetchContent_Declare(
+        ImGui-SFML
+        GIT_REPOSITORY https://github.com/SFML/imgui-sfml.git
+        GIT_TAG v3.0
+)
+FetchContent_MakeAvailable(ImGui-SFML)
+
 add_executable(SFML_Sandbox1
         src/main.cpp
         #src/Game.cpp
@@ -33,6 +50,7 @@ target_link_libraries(SFML_Sandbox1 PRIVATE
         SFML::Window
         SFML::System
         SFML::Audio
+        ImGui-SFML::ImGui-SFML
 )
 
 target_include_directories(SFML_Sandbox1 PRIVATE include)

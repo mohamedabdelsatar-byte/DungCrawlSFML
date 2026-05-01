@@ -31,6 +31,8 @@ class Player
     
     bool wasMoving = false;
     bool isControlDisabled = false; // Disable controls during sequences
+    bool chestUnlocked = false; // Chest unlock state
+
     int currentFrame = 0;
     float animTimer = 0.f;
     float frameDuration = 124.f; // Duration of each frame in milliseconds

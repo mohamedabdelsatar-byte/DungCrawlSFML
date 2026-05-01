@@ -2,6 +2,7 @@
 #include "GameData.h"
 #include "Player.h"
 #include "Interactables.h"
+#include <imgui.h>
 
 
 #include <iostream>
@@ -9,7 +10,7 @@
 
 Rooms::Rooms() : backgroundSprite(mainRoomTexture), 
 floorSprite(mainFloorTexture), doorSprite(doorTexture), 
-exitDoorSprite(doorTexture), wallSprite(wallTexture), overlaySprite(keyOverlayTexture), overlayText(overlayFont), interactionText(overlayFont)
+exitDoorSprite(doorTexture), wallSprite(wallTexture), overlaySprite(keyOverlayTexture), overlayText(overlayFont), interactionText(overlayFont), riddleScreenText(overlayFont)
 {
 }
 
@@ -59,6 +60,13 @@ void Rooms::init()
     float doorWidth = 32.f * scaleFactor;
     float doorHeight = 64.f * scaleFactor;
     
+    // R O G B Y color setting
+    doorColors[0] = sf::Color(255, 0, 0);    // Red
+    doorColors[1] = sf::Color(255, 128, 0);  // Orange
+    doorColors[2] = sf::Color(0, 255, 0);    // Green
+    doorColors[3] = sf::Color(0, 0, 255);    // Blue
+    doorColors[4] = sf::Color(255, 255, 0);  // Yellow
+
     for (int i = 0; i < 5; i++) {
         sf::Sprite door(doorTexture);
         
@@ -72,7 +80,8 @@ void Rooms::init()
         float yPos = 900.f - doorHeight; 
         
         door.setPosition({xPos, yPos});
-        door.setColor(sf::Color(150, 150, 150)); // Dim by default
+        
+        door.setColor(sf::Color(150, 150, 150)); 
 
         doorSprites.push_back(door); 
     }
@@ -206,6 +215,19 @@ void Rooms::load()
     interactionText.setOutlineThickness(3.f);
     interactionText.setString("");
 
+    // Load new blocky font
+    if (!riddleFont.openFromFile("Assets/Fonts/ARCADECLASSIC.TTF")) {
+        std::cout << "WARNING: ARCADECLASSIC.TTF missing inside Assets/Fonts/.\n";
+    }
+
+    // Set up Riddle Screen Text
+    riddleScreenText.setFont(riddleFont);
+    riddleScreenText.setCharacterSize(40);
+    riddleScreenText.setFillColor(sf::Color::White);
+    riddleScreenText.setOutlineColor(sf::Color::Black);
+    riddleScreenText.setOutlineThickness(3.f); // slightly thicker outline for arcade font
+    riddleScreenText.setString("");
+
     // --- Load Walls ---
     const float wallThickness = 50.f;
     const float screenWidth = 1920.f;
@@ -310,7 +332,12 @@ void Rooms::update(float deltaTime, Player& player, GameState& gameState, Player
     bool eKeyIsPressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E) && !gameState.overlayActive;
 
     for(int i = 0; i < (int)doorSprites.size(); i++) {
-        doorSprites[i].setColor(sf::Color(150, 150, 150)); 
+        if (mainDoorsColored) {
+            sf::Color base = doorColors[i];
+            doorSprites[i].setColor(sf::Color(base.r * 0.8f, base.g * 0.8f, base.b * 0.8f)); 
+        } else {
+            doorSprites[i].setColor(sf::Color(150, 150, 150));
+        }
     }
 //ALL COLLISION
     if(activeRoom == RoomID::MainRoom) {
@@ -319,11 +346,17 @@ void Rooms::update(float deltaTime, Player& player, GameState& gameState, Player
             if(player.getHitBox().findIntersection(getDoorHitbox(i))) {
                 
                 // Highlight the door
-                doorSprites[i].setColor(sf::Color::White); 
+                if (mainDoorsColored) {
+                    doorSprites[i].setColor(doorColors[i]); 
+                } else {
+                    doorSprites[i].setColor(sf::Color::White);
+                }
 
                 if (eKeyIsPressed && !eKeyWasPressed) {
                     std::cout << "Interacting with door: " << i << std::endl; 
                     handleDoorChoice(i, player, gameState, playerData, audioManager);
+                    eKeyWasPressed = true; // Prevent immediate interaction inside the new room
+                    return; // Skip remaining room logic this frame
                 }
             }
         }
@@ -334,12 +367,13 @@ void Rooms::update(float deltaTime, Player& player, GameState& gameState, Player
         
         if (player.getHitBox().findIntersection(exitZoneBox.getGlobalBounds())) {
             
-            
             exitDoorSprite.setColor(sf::Color::White); 
             
             if (eKeyIsPressed && !eKeyWasPressed) {
                 fixReturnPosition(player); 
                 changeRoom(RoomID::MainRoom, player, audioManager);
+                eKeyWasPressed = true; // Prevent immediate interaction back in Hub
+                return; // Skip remaining room logic this frame
             }
         }
     }
@@ -386,7 +420,38 @@ if (activeRoom == RoomID::keyLockRoom) {
         tablePuzzleTwo.Sprite.setColor(sf::Color::White);
         if(eKeyIsPressed && !eKeyWasPressed){
             audioManager.playInteractSound();
-            tablePuzzleTwo.OnInteract();
+            if (!rogbyCompleted) {
+                if (!showROGBYPopup) {
+                    // Start the riddle slow print (and replay if requested)
+                    fullRiddleText = "  +------------------------------------------------+\n\n"
+                                     "    The  answer  is  already  before  your  eyes.\n"
+                                     "    Read  the  doors  in  order.\n"
+                                     "    The  first  signs  will  reveal  the  path.\n\n"
+                                     "  +------------------------------------------------+\n\n";
+                    if (!rogbySeenOnce) {
+                        currentRiddleText = "";
+                        riddleCharIndex = 0;
+                        riddleCharTimer = 0.f;
+                        riddlePauseTimer = 0.f;
+                        riddleDarkenAlpha = 0.f;
+                        riddleFinishedWriting = false;
+                        rogbySeenOnce = true;
+                        
+                        // Activate door colors immediately when first reading the hint at table 2
+                        mainDoorsColored = true;
+                        pendingMysterySound = true; // Queue the sound to play on exit
+                    } else {
+                        currentRiddleText = fullRiddleText;
+                        riddleCharIndex = fullRiddleText.length();
+                        riddleDarkenAlpha = 220.f;
+                        riddleFinishedWriting = true;
+                    }
+                    riddleIsWriting = true;
+                    showROGBYPopup = true; // Actively lock screen right away
+                }
+            } else {
+                showROGBYPopup = true;
+            }
         }
     }
     else{
@@ -402,7 +467,7 @@ if (activeRoom == RoomID::chestcombinationRoom) {
         tablePuzzleFour.Sprite.setColor(sf::Color::White);
         if(eKeyIsPressed && !eKeyWasPressed){
             audioManager.playInteractSound();
-            tablePuzzleFour.OnInteract();
+            showRiddlePopup = true; // Play ducks riddle
         }
     }
     else{
@@ -419,13 +484,8 @@ if (activeRoom == RoomID::chestToolroom) {
         if (player.getHitBox().findIntersection(chestClosed.getHitBox())) {
             chestClosed.Sprite.setColor(sf::Color::White); 
             if (eKeyIsPressed && !eKeyWasPressed) {
-                std::cout << "Chest Opened!\n";
-                chestClosed.SwitchToAlternate();  
-                chestClosed.isChestOpen = true; 
-                if (!hasOpenedChestOnce) {
-                    audioManager.playChestOpenSound();
-                    hasOpenedChestOnce = true;
-                }
+                // Instead of opening straight away, trigger the pop-up
+                showChestCombinationPopup = true;
             }
         }
     } 
@@ -448,10 +508,7 @@ if (activeRoom == RoomID::chestToolroom) {
             chestClosed.Sprite.setColor(sf::Color::White);
         }
         else {
-            std::cout << "Chest Closed!\n";
-            chestClosed.ResetToDefault();  
-            chestClosed.isChestOpen = false;
-            chestClosed.Sprite.setColor(sf::Color(150, 150, 150));  // Dim it
+            chestClosed.Sprite.setColor(sf::Color(150, 150, 150));  // Dim it when not interacting
         }
     }
 }
@@ -541,6 +598,381 @@ if (activeRoom == RoomID::chestToolroom) {
         audioManager.stopChaseMusic();
     }
 
+    // Draw the ImGui chest combination popup if active
+    if (showChestCombinationPopup) {
+        player.isControlDisabled = true; // freeze player
+        
+        // Center the window on screen
+        ImGui::SetNextWindowPos(ImVec2(1920.f / 2.f, 1080.f / 2.f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(400.f, 200.f), ImGuiCond_Appearing);
+        
+        ImGui::Begin("Locked Chest", &showChestCombinationPopup, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
+        
+        ImGui::SetWindowFontScale(1.5f); // Scale text inside safely
+        
+        ImGui::Text("Enter the 4-digit passcode:");
+        
+        static char passcodeInput[16] = "";  // Need this to persist across frames
+        
+        // Auto-focus the input box so the user doesn't have to click
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+
+        if (ImGui::InputText("##Passcode", passcodeInput, 16, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal)) {
+            if (std::string(passcodeInput) == "3279") {
+                // Chest unlocks!
+                std::cout << "Chest Opened!\n";
+                chestClosed.SwitchToAlternate();
+                chestClosed.isChestOpen = true;
+                player.chestUnlocked = true;
+                if (!hasOpenedChestOnce) {
+                    audioManager.playChestOpenSound();
+                    hasOpenedChestOnce = true;
+                }
+                showChestCombinationPopup = false; 
+                player.isControlDisabled = false;
+            } else {
+                std::cout << "Incorrect Passcode!\n";
+                // Optionally clear the input or play error sound
+                passcodeInput[0] = '\0';
+            }
+        }
+        
+        // Also provide a button in case they click instead of hitting Enter
+        if (ImGui::Button("Unlock", ImVec2(120, 40))) {
+            if (std::string(passcodeInput) == "3279") {
+                std::cout << "Chest Opened!\n";
+                chestClosed.SwitchToAlternate();
+                chestClosed.isChestOpen = true;
+                player.chestUnlocked = true;
+                if (!hasOpenedChestOnce) {
+                    audioManager.playChestOpenSound();
+                    hasOpenedChestOnce = true;
+                }
+                showChestCombinationPopup = false;
+                player.isControlDisabled = false;
+            } else {
+                std::cout << "Incorrect Passcode!\n";
+                passcodeInput[0] = '\0';
+            }
+        }
+        
+        ImGui::SameLine();
+        
+        if (ImGui::Button("Cancel", ImVec2(120, 40))) {
+            showChestCombinationPopup = false;
+            player.isControlDisabled = false;
+            passcodeInput[0] = '\0';
+        }
+        
+        // Re-enable player if closed manually via "X" button
+        if (!showChestCombinationPopup) {
+            player.isControlDisabled = false;
+        }
+
+        ImGui::End();
+    }
+
+    // Draw the ImGui door combination popup if active
+    if (showDoorCombinationPopup) {
+        player.isControlDisabled = true; // freeze player
+        
+        // Center the window on screen
+        ImGui::SetNextWindowPos(ImVec2(1920.f / 2.f, 1080.f / 2.f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(400.f, 200.f), ImGuiCond_Appearing);
+        
+        ImGui::Begin("Locked Door", &showDoorCombinationPopup, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
+        
+        ImGui::SetWindowFontScale(1.5f); // Scale text inside safely
+        
+        ImGui::Text("Enter the 4-digit passcode:");
+        
+        static char doorPasscodeInput[16] = "";  // Need this to persist across frames
+        
+        // Auto-focus the input box so the user doesn't have to click
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+
+        if (ImGui::InputText("##DoorPasscode", doorPasscodeInput, 16, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal)) {
+            if (std::string(doorPasscodeInput) == "4729") {
+                std::cout << "Door Unlocked!\n";
+                // audioManager.playDoorOpenSound(); // Optional if it exists
+                gameState.visited[2] = true;
+                changeRoom(RoomID::chestToolroom, player, audioManager);
+                showDoorCombinationPopup = false; 
+                player.isControlDisabled = false;
+                doorPasscodeInput[0] = '\0';
+            } else {
+                std::cout << "Incorrect Passcode!\n";
+                doorPasscodeInput[0] = '\0';
+                audioManager.playDeniedSound();
+            }
+        }
+        
+        if (ImGui::Button("Unlock", ImVec2(120, 40))) {
+            if (std::string(doorPasscodeInput) == "4729") {
+                std::cout << "Door Unlocked!\n";
+                gameState.visited[2] = true;
+                changeRoom(RoomID::chestToolroom, player, audioManager);
+                showDoorCombinationPopup = false; 
+                player.isControlDisabled = false;
+                doorPasscodeInput[0] = '\0';
+            } else {
+                std::cout << "Incorrect Passcode!\n";
+                doorPasscodeInput[0] = '\0';
+                audioManager.playDeniedSound();
+            }
+        }
+        
+        ImGui::SameLine();
+        
+        if (ImGui::Button("Cancel", ImVec2(120, 40))) {
+            showDoorCombinationPopup = false;
+            player.isControlDisabled = false;
+            doorPasscodeInput[0] = '\0';
+        }
+        
+        // Re-enable player if closed manually via "X" button
+        if (!showDoorCombinationPopup) {
+            player.isControlDisabled = false;
+        }
+
+        ImGui::End();
+    }
+
+    // Draw the ImGui riddle popup if active
+    if (showRiddlePopup) {
+        player.isControlDisabled = true; // freeze player
+        
+        struct Question {
+            std::string text;
+            std::string correctAnswer;
+        };
+        
+        static std::vector<Question> gameStage = {
+            {"How many ducks are in this scenario: 2 ducks in front of a duck, 2 ducks behind a duck, and 1 duck in the middle?", "3"},
+            {"If you are running a race and you pass the person in second place, what place are you in?", "2"},
+            {"If A = 1, B = 2, C = 3, etc., what is the sum of 'BAD'?", "7"},
+            {"If you rotate the number 6 180 degrees, what number do you get?", "9"}
+        };
+        
+        // Center the window on screen
+        ImGui::SetNextWindowPos(ImVec2(1920.f / 2.f, 1080.f / 2.f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(800.f, 300.f), ImGuiCond_Appearing);
+        
+        ImGui::Begin("Table Riddle", &showRiddlePopup, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
+        
+        ImGui::SetWindowFontScale(1.5f); // Scale text inside safely
+        
+        if (riddlesCompleted) {
+            ImGui::TextWrapped("Alas, thou hast conquered the trial of wits and bested the table's riddles!");
+            ImGui::TextWrapped("\nThy code of passage is: 3279");
+            if (ImGui::Button("Close", ImVec2(120, 40))) {
+                showRiddlePopup = false;
+                player.isControlDisabled = false;
+            }
+        } else {
+            ImGui::TextWrapped("Question %d/4:", currentRiddle + 1);
+            ImGui::TextWrapped("%s", gameStage[currentRiddle].text.c_str());
+            
+            static char riddleInput[16] = "";  // Need this to persist across frames
+            static bool setFocus = false;
+            
+            // Auto-focus the input box down so the user doesn't have to click
+            if (ImGui::IsWindowAppearing() || setFocus) {
+                ImGui::SetKeyboardFocusHere();
+                setFocus = false;
+            }
+
+            if (ImGui::InputText("##RiddleAnswer", riddleInput, 16, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsDecimal)) {
+                if (std::string(riddleInput) == gameStage[currentRiddle].correctAnswer) {
+                    std::cout << "Correct!\n";
+                    audioManager.playInteractSound();
+                    currentRiddle++;
+                    riddleInput[0] = '\0';
+                    setFocus = true;
+                    
+                    if (currentRiddle >= gameStage.size()) {
+                        riddlesCompleted = true;
+                        std::cout << "All riddles solved!\n";
+                    }
+                } else {
+                    std::cout << "Incorrect Answer!\n";
+                    riddleInput[0] = '\0';
+                    setFocus = true;
+                    audioManager.playDeniedSound();
+                }
+            }
+            
+            if (ImGui::Button("Submit", ImVec2(120, 40))) {
+                if (std::string(riddleInput) == gameStage[currentRiddle].correctAnswer) {
+                    std::cout << "Correct!\n";
+                    audioManager.playInteractSound();
+                    currentRiddle++;
+                    riddleInput[0] = '\0';
+                    setFocus = true;
+                    
+                    if (currentRiddle >= gameStage.size()) {
+                        riddlesCompleted = true;
+                        std::cout << "All riddles solved!\n";
+                    }
+                } else {
+                    std::cout << "Incorrect Answer!\n";
+                    riddleInput[0] = '\0';
+                    setFocus = true;
+                    audioManager.playDeniedSound();
+                }
+            }
+            
+            ImGui::SameLine();
+            
+            if (ImGui::Button("Cancel", ImVec2(120, 40))) {
+                showRiddlePopup = false;
+                player.isControlDisabled = false;
+                riddleInput[0] = '\0';
+            }
+        }
+        
+        // Re-enable player if closed manually via "X" button
+        if (!showRiddlePopup) {
+            player.isControlDisabled = false;
+        }
+
+        ImGui::End();
+    }
+
+    // Draw the ImGui ROGBY popup if active
+    if (showROGBYPopup) {
+        player.isControlDisabled = true; // freeze player
+        
+        if (riddleIsWriting) {
+            // Screen darken fade logic
+            if (riddleDarkenAlpha < 220.f) {
+                riddleDarkenAlpha += deltaTime * 0.2f;
+                if (riddleDarkenAlpha > 220.f) riddleDarkenAlpha = 220.f;
+            }
+            
+            if (!riddleFinishedWriting) {
+                // Update logic for typing the riddle character by character
+                if (riddlePauseTimer > 0.f) {
+                    riddlePauseTimer -= deltaTime;
+                } else if (riddleCharIndex < fullRiddleText.length()) {
+                    riddleCharTimer -= deltaTime;
+                    if (riddleCharTimer <= 0.f) {
+                        char c = fullRiddleText[riddleCharIndex];
+                        currentRiddleText += c;
+                        riddleCharIndex++;
+                        
+                        if (c == '.' || c == '\n') {
+                            riddlePauseTimer = 500.f; // Add delay at the end of sentence/line
+                        } else {
+                            riddleCharTimer = 20.f; // normal delay between letters
+                        }
+                    }
+                } else {
+                    riddleFinishedWriting = true;
+                }
+                riddleScreenText.setString(currentRiddleText);
+            } else {
+                // Show choice buttons AFTER finishing typing
+                ImGui::SetNextWindowPos(ImVec2(1920.f / 2.f, 1080.f - 200.f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                ImGui::Begin("RiddleAction", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground);
+                ImGui::SetWindowFontScale(1.8f);
+                if (ImGui::Button("Enter Code", ImVec2(200, 60))) {
+                    riddleIsWriting = false; // Transition to normal prompt
+                }
+                ImGui::SameLine(0, 50.f);
+                if (ImGui::Button("Cancel", ImVec2(200, 60))) {
+                    showROGBYPopup = false;
+                    riddleIsWriting = false;
+                    player.isControlDisabled = false;
+                }
+                ImGui::End();
+            }
+        } else {
+            // ImGui popup for actual riddle text input
+            ImGui::SetNextWindowPos(ImVec2(1920.f / 2.f, 1080.f / 2.f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(800.f, 300.f), ImGuiCond_Appearing);
+            
+            ImGui::Begin("Table Riddle", &showROGBYPopup, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
+            
+            ImGui::SetWindowFontScale(1.5f); // Scale text inside safely
+            
+            if (rogbyCompleted) {
+                ImGui::TextWrapped("Alas, thou hast conquered the trial of wits and bested the table's riddles!");
+                ImGui::TextWrapped("\nThy code of passage is: 4729");
+                if (ImGui::Button("Close", ImVec2(120, 40))) {
+                    showROGBYPopup = false;
+                    player.isControlDisabled = false;
+                }
+            } else {
+                ImGui::TextWrapped("What is the answer to the colored doors?");
+                
+                static char rogbyInput[16] = "";  // Need this to persist across frames
+                static bool setFocus = false;
+                
+                // Auto-focus the input box down so the user doesn't have to click
+                if (ImGui::IsWindowAppearing() || setFocus) {
+                    ImGui::SetKeyboardFocusHere();
+                    setFocus = false;
+                }
+
+                if (ImGui::InputText("##ROGBYAnswer", rogbyInput, 16, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsUppercase)) {
+                    if (std::string(rogbyInput) == "ROGBY") {
+                        std::cout << "Correct!\n";
+                        audioManager.playInteractSound();
+                        rogbyInput[0] = '\0';
+                        setFocus = true;
+                        rogbyCompleted = true;
+                    } else {
+                        std::cout << "Incorrect Answer!\n";
+                        rogbyInput[0] = '\0';
+                        setFocus = true;
+                        audioManager.playDeniedSound();
+                    }
+                }
+                
+                if (ImGui::Button("Submit", ImVec2(120, 40))) {
+                    if (std::string(rogbyInput) == "ROGBY") {
+                        std::cout << "Correct!\n";
+                        audioManager.playInteractSound();
+                        rogbyInput[0] = '\0';
+                        setFocus = true;
+                        rogbyCompleted = true;
+                    } else {
+                        std::cout << "Incorrect Answer!\n";
+                        rogbyInput[0] = '\0';
+                        setFocus = true;
+                        audioManager.playDeniedSound();
+                    }
+                }
+                
+                ImGui::SameLine();
+                
+                if (ImGui::Button("Cancel", ImVec2(120, 40))) {
+                    showROGBYPopup = false;
+                    player.isControlDisabled = false;
+                    rogbyInput[0] = '\0';
+                }
+            }
+            
+            // Re-enable player if closed manually via "X" button
+            if (!showROGBYPopup) {
+                player.isControlDisabled = false;
+            }
+
+            ImGui::End();
+        }
+    }
+
+
+    if (!showROGBYPopup && pendingMysterySound) {
+        audioManager.playMysteryFoundSound();
+        pendingMysterySound = false;
+    }
+
     eKeyWasPressed = eKeyIsPressed;
 }
 
@@ -592,6 +1024,29 @@ void Rooms::drawOverlay(sf::RenderWindow& window, const GameState& gameState)
         window.draw(overlayBackground);
         window.draw(overlaySprite);
         window.draw(overlayText);
+    }
+    
+    // Draw Riddle writing effect screen darken
+    if (showROGBYPopup && riddleIsWriting) {
+        sf::RectangleShape darken(sf::Vector2f(1920.f, 1080.f));
+        // Use the animated alpha for a dramatic fade instead of immediate
+        darken.setFillColor(sf::Color(0, 0, 0, static_cast<unsigned char>(riddleDarkenAlpha)));
+        window.draw(darken);
+        
+        // Only draw the text if it has content, helps avoid small dot
+        if (!currentRiddleText.empty()) {
+            // Center text on screen
+            sf::FloatRect textBounds = riddleScreenText.getLocalBounds();
+            riddleScreenText.setOrigin({textBounds.size.x / 2.0f, textBounds.size.y / 2.0f});
+            riddleScreenText.setPosition({1920.f / 2.f, 1080.f / 2.f});
+            
+            // Fade text in alongside darkness for a cooler effect
+            unsigned char textAlpha = static_cast<unsigned char>(255.f * (riddleDarkenAlpha / 220.f));
+            riddleScreenText.setFillColor(sf::Color(255, 255, 255, textAlpha));
+            riddleScreenText.setOutlineColor(sf::Color(0, 0, 0, textAlpha));
+            
+            window.draw(riddleScreenText);
+        }
     }
     
     // Draw Interaction Message on top
@@ -670,8 +1125,13 @@ void Rooms::changeRoom(RoomID id, Player& player, AudioManager& audioManager)
                 break;
             case RoomID::chestToolroom:
                 backgroundSprite.setTexture(chestToolroomTexture, true);
-                chestClosed.isChestOpen = false;  // Reset chest to closed state
-                chestClosed.ResetToDefault();  // Reset to closed texture
+                if (!player.chestUnlocked) {
+                    chestClosed.isChestOpen = false;  // Keep closed if it wasn't unlocked
+                    chestClosed.ResetToDefault();
+                } else {
+                    chestClosed.isChestOpen = true;  // Keep opened
+                    chestClosed.SwitchToAlternate();
+                }
                 break;
             case RoomID::keyLockRoom:
                 backgroundSprite.setTexture(keyLockRoomTexture, true);
@@ -708,7 +1168,7 @@ void Rooms::handleDoorChoice(int index, Player& player, GameState& gameState, Pl
     switch(index) {
         case 0:
         if(playerData.hasKey) {
-            changeRoom(RoomID::winScreen, player, audioManager);
+            gameState.Escaped = true; // Tell main.cpp to trigger the win sequence
         } else {
             showInteractionMessage("This door is locked, should look around");
             std::cout << "The door is locked. You need a key to enter.\n";
@@ -741,9 +1201,11 @@ void Rooms::handleDoorChoice(int index, Player& player, GameState& gameState, Pl
             }
             break;
         case 2:
-            // showInteractionMessage("The door is locked"); // (Disabled text for now)
-            changeRoom(RoomID::chestToolroom, player, audioManager);
-            gameState.visited[2] = true;
+            if (!gameState.visited[2]) {
+                showDoorCombinationPopup = true;
+            } else {
+                changeRoom(RoomID::chestToolroom, player, audioManager);
+            }
             break;
         case 3:
             // showInteractionMessage("The door is locked"); // (Disabled text for now)
