@@ -413,6 +413,9 @@ if (currentAppState == AppState::MainMenu) {
         playerData.hasKey = false;
         playerData.name = "";
         preGamePhase = 0;
+        preGameCharIndex = 0;
+        preGameCharTimer = 0.0f;
+        std::memset(nameBuffer, 0, sizeof(nameBuffer));
         preGameLines.clear();
         currentLineText = "";
         audioManager.winLongSound.stop();
